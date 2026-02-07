@@ -1,14 +1,99 @@
 {
   "name": "mct-ad-campaign",
   "version": "1.0.0",
-  "description": "MCT module for AD-CAMPAIGN",
-  "main": "dist/index.js",
+  "description": "MCP server module for managing advertising campaigns",
+  "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch src/index.ts",
-    "test": "jest",
-    "setup": "npm install && npx drizzle-kit push:pg"
+    "start": "node dist/server.js",
+    "dev": "nodemon src/server.ts",
+    "lint": "eslint . --ext .ts",
+    "test": "jest"
   },
-  "keywords": ["mct", "api", "microservice"],
-  "license": "MIT"
+  "dependencies": {
+    "express": "^4.17.1",
+    "pg": "^8.5.1",
+    "reflect-metadata": "^0.1.13",
+    "typeorm": "^0.2.34",
+    "dotenv": "^8.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^14.14.37",
+    "@types/express": "^4.17.11",
+    "typescript": "^4.2.4",
+    "ts-node": "^9.1.1",
+    "nodemon": "^2.0.7",
+    "eslint": "^7.23.0",
+    "jest": "^26.6.3"
+  },
+  "type": "module"
 }
+### 2. src/index.ts
+import express from 'express';
+import { createConnection } from 'typeorm';
+import campaignRoutes from './api/routes';
+const app = express();
+const port = process.env.PORT || 3000;
+app.use(express.json());
+app.use('/api/campaigns', campaignRoutes);
+createConnection().then(() => {
+  app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+  });
+}).catch(error => console.log("Database connection failed:", error));
+### 3. src/api/routes.ts
+import { Router } from 'express';
+import { getCampaigns, createCampaign, updateCampaign, deleteCampaign } from '../services/campaignService';
+const router = Router();
+router.get('/', getCampaigns);
+router.post('/', createCampaign);
+router.put('/:id', updateCampaign);
+router.delete('/:id', deleteCampaign);
+export default router;
+### 4. src/db/schema.ts
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+@Entity()
+export class Campaign {
+  @PrimaryGeneratedColumn()
+  id: number;
+  @Column()
+  name: string;
+  @Column()
+  startDate: Date;
+  @Column()
+  endDate: Date;
+  @Column()
+  budget: number;
+}
+### 5. src/mct/server.ts
+import { MCTServer } from 'mcp-core';
+const mctServer = new MCTServer({
+  address: 'http://localhost:3000',
+  tools: ['./tools']
+});
+mctServer.start();
+### 6. src/mct/tools.ts
+import { Campaign } from '../db/schema';
+import { createCampaign, getCampaigns } from '../services/campaignService';
+export const tools = {
+  getCampaigns: () => getCampaigns(),
+  createCampaign: (campaignData: Campaign) => createCampaign(campaignData)
+};
+### 7. src/services/campaignService.ts
+import { Repository } from 'typeorm';
+import { Campaign } from '../db/schema';
+let campaignRepository: Repository<Campaign>;
+export const getCampaigns = async () => {
+  return campaignRepository.find();
+};
+export const createCampaign = async (campaignData: Campaign) => {
+  const campaign = campaignRepository.create(campaignData);
+  return campaignRepository.save(campaign);
+};
+export const updateCampaign = async (id: number, campaignData: Partial<Campaign>) => {
+  await campaignRepository.update(id, campaignData);
+  return campaignRepository.findOne(id);
+};
+export const deleteCampaign = async (id: number) => {
+  return campaignRepository.delete(id);
+};
